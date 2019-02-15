@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <addon id="plugin.video.hdfilmcehennemi"
 version="1.0.0"
-name="HdFilmCehennemi.Com"
+name="HdFilmCehennemi"
 provider-name="MoZ">
 <requires>
   <import addon="xbmc.python" version="2.25.0"/>
