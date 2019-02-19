@@ -15,6 +15,8 @@ import xbmc
 import base64
 import re
 
+SITEURL = 'https://www.hdfilmcehennemi1.com'
+
 # Get the plugin url in plugin:// notation.
 _url = sys.argv[0]
 # Get the plugin handle as an integer number.
@@ -52,7 +54,7 @@ def log(msg):
 
 def fetch_url(url):
   req = urllib2.Request(url)
-  req.add_header('Referer','https://www.hdfilmcehennemi1.com/')
+  req.add_header('Referer',SITEURL)
   req.add_header('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36')
   return urllib2.urlopen(req).read()
 
@@ -84,7 +86,7 @@ def list_search():
       xbmcplugin.addDirectoryItem(_handle, url, list_item, True)
 
     #list_item = xbmcgui.ListItem(label='IMDb 7+ Filmler')
-    #url = get_url(action='imdb7')
+    #url = get_url(action='imdb7')f
     #is_folder = True
     #xbmcplugin.addDirectoryItem(_handle, url, list_item, is_folder)
 
@@ -93,17 +95,31 @@ def list_search():
     # Finish creating a virtual folder.
     xbmcplugin.endOfDirectory(_handle)
 
+def find_search_link():
+  html = fetch_url(SITEURL+'/?s=bumblebee')
+  cx =re.findall("var cx = '([^']+)'", html)[0]
+  log('cx = '+cx)
+  html = fetch_url('https://cse.google.com/cse.js?cx='+cx)
+  log(html)
+  cse_token = re.findall('"cse_token": "([^"]+)"', html)[0]
+  exp = ",".join(json.loads(re.findall('"exp": (\[[^\]]+\])', html)[0]))
+  #",".join(re.findall('"exp": \["([^"]+)", "([^"]+)"', html))
+  log('cse = '+cse_token+" exp="+exp)
+  return "https://cse.google.com/cse/element/v1?rsz=filtered_cse&num=10&hl=tr&source=gcsc&gss=.com&cx={0}&safe=off&cse_tok={1}&sort=&exp={2}&callback=google.search.cse.api56".format(cx, cse_token, exp)
+
+
 def do_search():
   text_to_search = get_input('')
-  url = 'https://cse.google.com/cse/element/v1?rsz=filtered_cse&num=10&hl=tr&source=gcsc&gss=.com&cx=015716483505879080032:ixt5mjxgo3i&safe=off&cse_tok=AKaTTZhXLPRINybw3smeHRwJhdEV:1550151152902&sort=&exp=csqr,4231017&callback=google.search.cse.api5553&{0}'.format(urlencode({'q':text_to_search}))
-  #xbmc.log(url, level=xbmc.LOGNOTICE)
+  url = find_search_link()
+  url = url+'&{0}'.format(urlencode({'q':text_to_search}))
+  #url = 'https://cse.google.com/cse/element/v1?rsz=filtered_cse&num=10&hl=tr&source=gcsc&gss=.com&cx=015716483505879080032:ixt5mjxgo3i&safe=off&cse_tok=AKaTTZhXLPRINybw3smeHRwJhdEV:1550151152902&sort=&exp=csqr,4231017&callback=google.search.cse.api5553&{0}'.format(urlencode({'q':text_to_search}))
+  #url = 'https://cse.google.com/cse/element/v1?rsz=filtered_cse&num=10&hl=tr&source=gcsc&gss=.com&cx=015716483505879080032:ixt5mjxgo3i&safe=off&cse_tok=AKaTTZjvhM4zTZlDEUVQmW9nqIhC:1550331064626&sort=&exp=csqr,4231017&callback=google.search.cse.api19970&{0}'.format(urlencode({'q':text_to_search}))
+  #english
+  #url='https://cse.google.com/cse/element/v1?rsz=filtered_cse&num=10&hl=en&source=gcsc&gss=.com&cx=013555815768498568673:vzcfsubz2aq&safe=off&cse_tok=AKaTTZjuQ86TcktKGwZ73gdm3EC0:1550350923553&sort=&exp=csqr,4231017&callback=google.search.cse.api3320&{0}'.format(urlencode({'q':text_to_search}))  
+  html = fetch_url(url)
+  #log(html)
 
-  req = urllib2.Request(url)
-  req.add_header('Referer','https://www.hdfilmcehennemi1.com/')
-  req.add_header('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36')
-  html = urllib2.urlopen(req).read()
   html = html[html.find('{') : html.rfind('}')+1]
-  #xbmc.log(html, level=xbmc.LOGNOTICE)
   js = json.loads(html)
 
   xbmcplugin.setPluginCategory(_handle, 'HdFilmCehennemi.Com')
@@ -195,11 +211,13 @@ def list_special(listTitle, listKey):
 
   seen = {}
   for page in range(1,6):
-    html = fetch_url('https://www.hdfilmcehennemi1.com'+listKey+'/page/'+str(page)+'/')
+    html = fetch_url(SITEURL+listKey+'/page/'+str(page)+'/')
     movies = re.findall('<div class="poster poster-pop" data-original-title="([^"]+)".*?data-types="([^"]+)".*?data-year="([^"]+)".*?data-content="([^"]+)".*?<a href="([^"]+)".*?<img.*?data-flickity-lazyload="([^"]+)".*?<span>IMDb</span>([^<]+)',html,re.MULTILINE|re.DOTALL)
     #log('new-movies: '+str(movies))       
     for m in movies:
       title = ''.join(m[0].split('|')[0].split('izle')).strip()
+      if title[0:5] == 'Watch ':
+        title = title[6]
       if seen.get(title, False) == False :
         genre = str(m[1])
         year = str(m[2])
