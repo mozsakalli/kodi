@@ -58,6 +58,13 @@ def fetch_url(url):
   req.add_header('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36')
   return urllib2.urlopen(req).read()
 
+def fetch_url_with_link(url):
+  req = urllib2.Request(url)
+  req.add_header('Referer',SITEURL)
+  req.add_header('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36')
+  res = urllib2.urlopen(req);
+  return {'url': res.geturl(), 'html':res.read()}
+
 SPECIALS = [
   {'title':'Son Eklenenler', 'key':''},
   {'title':'IMDb 7+ Filmler', 'key':'/imdb-7'},
@@ -80,15 +87,16 @@ def list_search():
     is_folder = True
     xbmcplugin.addDirectoryItem(_handle, url, list_item, is_folder)
 
+    #list_item = xbmcgui.ListItem(label='Test')
+    #list_item.setInfo('video', {'title': 'abc', 'mediatype': 'video'})
+    #url = 'https://tslave5.vanlongstream.com/hls/b70e3f7255749d3317dc69696a2fef9a/b70e3f7255749d3317dc69696a2fef9a.playlist.m3u8'  
+    #list_item.setProperty('IsPlayable', 'true')
+    #xbmcplugin.addDirectoryItem(_handle, url, list_item, False)
+
     for item in SPECIALS :
       list_item = xbmcgui.ListItem(label=item['title'])
       url = get_url(action='special', title=str(item['title']), key=item['key'].encode('utf-8'))
       xbmcplugin.addDirectoryItem(_handle, url, list_item, True)
-
-    #list_item = xbmcgui.ListItem(label='IMDb 7+ Filmler')
-    #url = get_url(action='imdb7')f
-    #is_folder = True
-    #xbmcplugin.addDirectoryItem(_handle, url, list_item, is_folder)
 
     # Add a sort method for the virtual folder items (alphabetically, ignore articles)
     #xbmcplugin.addSortMethod(_handle, xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE)
@@ -98,14 +106,10 @@ def list_search():
 def find_search_link():
   html = fetch_url(SITEURL+'/?s=bumblebee')
   cx =re.findall("var cx = '([^']+)'", html)[0]
-  log('cx = '+cx)
   html = fetch_url('https://cse.google.com/cse.js?cx='+cx)
-  log(html)
   cse_token = re.findall('"cse_token": "([^"]+)"', html)[0]
   exp = ",".join(json.loads(re.findall('"exp": (\[[^\]]+\])', html)[0]))
-  #",".join(re.findall('"exp": \["([^"]+)", "([^"]+)"', html))
-  log('cse = '+cse_token+" exp="+exp)
-  return "https://cse.google.com/cse/element/v1?rsz=filtered_cse&num=10&hl=tr&source=gcsc&gss=.com&cx={0}&safe=off&cse_tok={1}&sort=&exp={2}&callback=google.search.cse.api56".format(cx, cse_token, exp)
+  return "https://cse.google.com/cse/element/v1?rsz=filtered_cse&num=10&hl=en&source=gcsc&gss=.com&cx={0}&safe=off&cse_tok={1}&sort=&exp={2}&callback=google.search.cse.api56".format(cx, cse_token, exp)
 
 
 def do_search():
@@ -117,7 +121,6 @@ def do_search():
   #english
   #url='https://cse.google.com/cse/element/v1?rsz=filtered_cse&num=10&hl=en&source=gcsc&gss=.com&cx=013555815768498568673:vzcfsubz2aq&safe=off&cse_tok=AKaTTZjuQ86TcktKGwZ73gdm3EC0:1550350923553&sort=&exp=csqr,4231017&callback=google.search.cse.api3320&{0}'.format(urlencode({'q':text_to_search}))  
   html = fetch_url(url)
-  #log(html)
 
   html = html[html.find('{') : html.rfind('}')+1]
   js = json.loads(html)
@@ -142,9 +145,19 @@ def do_search():
   # Finish creating a virtual folder.
   xbmcplugin.endOfDirectory(_handle)
 
-def extract_movies(html):
-  #log('html='+html)
+def extract_movies(url):
+  #log("extract-from-atob: "+url)
+
+  response = fetch_url_with_link(url);
+  html = response['html']
   html = ''.join(html.split("\n"))
+  url = response['url']
+
+  #vanlongstream
+  m = re.search('(.*?vanlongstream\.com).*?\?id=(.*)', url, re.DOTALL);
+  if(m):
+    return [{'title':'', 'url':m.group(1)+'/hsl/'+m.group(2)+'/'+m.group(2)+'.playlist.m3u8'}]
+
   movies = []
   #rapid frame
   m = re.findall('file:"([^"]+)"(,label:"([^"]+)")?', html, re.MULTILINE)
@@ -175,17 +188,22 @@ def fetch_video_link(url):
     else:
       h=fetch_url(link[1])
 
+    #log('link: '+link[1])
     m = re.search('atob\(([^\)]+)',h)
     if(m):
       varname = m.group(1);
-      m = re.search("var "+varname+" = '([^']+)'", h)
+      m = re.search("var "+varname+"[^']*'([^']+)'", h)
+      #m = re.search("var "+varname+" = '([^']+)'", h)
       if(m):
         code = base64.b64decode(m.group(1))
         m = re.search('src="([^"]+)"', code)
         movielink = m.group(1)
-        found = extract_movies(fetch_url(movielink))
+        found = extract_movies(movielink)
         for m in found:
-          movies.append({'title':link[2]+' - '+m['title'], 'url':m['url']})
+          t = link[2]
+          if(m['title']!=''):
+            t = t + ' - '+m['title']
+          movies.append({'title':t, 'url':m['url']})
   return movies
 
 
